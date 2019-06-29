@@ -952,6 +952,8 @@ This approach contains a complete select fragment, and this is very questionable
 two reasons.  For one, being a complete fragment, it means more assumptions on the SQL back
 end.  Next, it executes that select statement for each plant, the loop being hidden in SQL.
 
+For these cases, Ecto offers subqueries, and joins. **TODO**.
+
 If we went further down the way writing SQL ourselves, we could write the complete query, have
 it executed by the remote engine, collect the result and process it through a schemaless
 `Botany.Repo.insert_all` or `update_all` as seen before.
