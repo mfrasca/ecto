@@ -952,15 +952,28 @@ This approach contains a complete select fragment, and this is very questionable
 two reasons.  For one, being a complete fragment, it means more assumptions on the SQL back
 end.  Next, it executes that select statement for each plant, the loop being hidden in SQL.
 
-For these cases, Ecto offers subqueries, and joins. **TODO**.
+The `Ecto.Query.from/2` function offers a `subquery` option, which might help us with the first
+criticism point for the above approach, but in fact a better approach, addressing both points,
+would using the `join`/`on` options:
 
-If we went further down the way writing SQL ourselves, we could write the complete query, have
-it executed by the remote engine, collect the result and process it through a schemaless
+```
+q = from(p in "plant",
+  join: a in "accession",
+  on: a.code == fragment(~S"substring(? from '^\d+\.\d+')", p.name),
+  update: [set: [accession_id: a.id]])
+Botany.Repo.update_all(q, [])
+```
+
+As always: check the documentation, ask on a forum, and experiment.
+
+There will be cases where it will be easier to write the complete query, have it executed by
+the remote engine, collect the result and process it through a schemaless
 `Botany.Repo.insert_all` or `update_all` as seen before.
 
-When working at a software with very strict performance requirements, you would definitely
-evaluate and refine such points.  Here, after all, we're just doing a migration, so paying so
-much care to efficiency is possibly not such a crucial issue.
+When working at a software with strict performance requirements, you would definitely evaluate
+and refine your queries, at least the ones which your software would execute most frequently.
+Here, after all, we're just doing a migration, so paying so much care to efficiency is possibly
+not such a crucial issue.
 
 ### Out-of-the-box thoughts
 
