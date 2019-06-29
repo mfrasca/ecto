@@ -3,8 +3,8 @@ defmodule Botany.Repo.Migrations.InitialMigration do
 
   def change do
     create table(:location) do
-      add :code, :string
-      add :name, :string
+      add :code, :string, size: 20
+      add :name, :string, size: 120
       add :description, :string
     end
 

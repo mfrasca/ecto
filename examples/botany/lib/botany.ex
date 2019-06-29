@@ -7,7 +7,8 @@ defmodule Botany do
 
   def get_recursive_accessions_by_name(top_name) do
     import Ecto.Query
-    top = from(t in Botany.Taxon, where: t.epithet==^top_name)|> Botany.Repo.one
-    Botany.get_recursive_accessions(top)
+    from(t in Botany.Taxon, where: t.epithet==^top_name) |>
+      Botany.Repo.one |>
+      Botany.get_recursive_accessions
   end
 end
