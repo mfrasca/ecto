@@ -1205,7 +1205,7 @@ interesting, having a function that retrieves them all, given the top taxon.
 
 The function would collect all accessions associated to the top taxon, and add to it all
 accessions associated to the child taxa.  And do this recursively.  Once written, you doubt
-whether life can be this easy.
+whether life can be easier than this.
 
 ```
   def get_recursive_accessions(top) do
@@ -1226,6 +1226,23 @@ whether life can be this easy.
 If you did not alter the provided sample data, you can easily verify we have 8 *Zingiberales*,
 4 *Salvia* and 3 *Origanum* accessions.  What about the number of plants?
 
-### Contacts management (one-to-one)
+## Contacts management (one-to-one)
+*day 4*
 
-finally, `one_to_one`: contacts, sources, verifiers, gardners, visitors.
+The main use of one-to-one relations is to have one shared schema, representing some common
+aspects of similar but distinct concepts, and one or more schemas representing the distinctive
+aspects of the various collections sharing the same base.
+
+Concretely, for example:
+
+People, with a name, and a way to contact them.  Then if it's a taxonomist, their specialty, or
+university affiliation.  If it's the contact person for a commercial enterprise, the name and
+the description of the enterprise, if it's an employee, their role and maybe even database
+access rights.
+
+We would have that single central shared table, and several satellits with a foreign key to it,
+but respecting the constraint that only one element from each table ever uses any one element
+in the central shared table.
+
+Back to our example, we would use contact people to plant sources, and taxonomists.
+
