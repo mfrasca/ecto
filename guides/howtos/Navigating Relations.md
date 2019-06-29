@@ -954,7 +954,7 @@ end.  Next, it executes that select statement for each plant, the loop being hid
 
 The `Ecto.Query.from/2` function offers a `subquery` option, which might help us with the first
 criticism point for the above approach, but in fact a better approach, addressing both points,
-would using the `join`/`on` options:
+would using the `join`/`on` options:  **TODO (check that it does work)**
 
 ```
 q = from(p in "plant",
