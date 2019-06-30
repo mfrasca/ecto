@@ -60,13 +60,11 @@ defmodule Botany.Repo.Migrations.PlantNameToAccessionCode do
     end
 
     flush()
-    # we want to execute this one:
-    # UPDATE plant p SET name=CONCAT((SELECT code FROM accession a WHERE a.id=p.accession_id),'.',p.code);
-
     q = from(p in "plant",
       join: a in "accession",
       on: a.id == p.accession_id,
-      update: [set: [name: fragment(~S"concat(?, '.', ?)", a.code, p.code)]])
+      update: [set: [name: fragment(~S"concat(?, '.', ?)", a.code, p.code),
+                     species: a.species]])
     Botany.Repo.update_all(q, [])
 
     alter table(:plant) do

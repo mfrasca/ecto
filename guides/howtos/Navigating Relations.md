@@ -988,19 +988,26 @@ repeat all steps up to here.  You would see precisely four queries being execute
 review**:
 
 ```SQL
-SELECT DISTINCT ON (substring(p0."name" from '^\d+\.\d+')) substring(p0."name" from '^\d+\.\d+') FROM "plant" AS p0 
+SELECT DISTINCT ON (substring(p0."name" from '^\d+\.\d+')) substring(p0."name" from '^\d+\.\d+') FROM "plant" AS p0
   []
-INSERT INTO "accession" ("code") VALUES ($1),($2),($3),($4),($5),($6),($7),($8),($9),($10),($11),($12),($13),($14),($15) 
-  ["2018.0002", "2018.0019", "2018.0025", "2018.0026", "2018.0027", "2018.0029", "2018.0032", "2018.0044", "2018.0045", 
+INSERT INTO "accession" ("code") VALUES ($1),($2),($3),($4),($5),($6),($7),($8),($9),($10),($11),($12),($13),($14),($15)
+  ["2018.0002", "2018.0019", "2018.0025", "2018.0026", "2018.0027", "2018.0029", "2018.0032", "2018.0044", "2018.0045",
    "2018.0047", "2018.0057", "2018.0058", "2018.0063", "2018.0067", "2018.0068"]
-UPDATE "plant" AS p0 SET "accession_id" = a1."id", "code" = substring(p0."name" from '\d+$') FROM "accession" AS a1 WHERE (a1."code" = substring(p0."name" from '^\d+\.\d+')) 
+UPDATE "plant" AS p0 SET "accession_id" = a1."id", "code" = substring(p0."name" from '\d+$')
+    FROM "accession" AS a1 WHERE (a1."code" = substring(p0."name" from '^\d+\.\d+'))
+  []
+UPDATE "accession" AS a0 SET "species" = p1."species",
+                             "orig_quantity" = a0."orig_quantity" + p1."quantity",
+                             "bought_on" = p1."bought_on",
+                             "bought_from" = p1."bought_from"
+    FROM "plant" AS p1 WHERE (p1."accession_id" = a0."id")
   []
 ```
 
 There will surely be also cases where it is easier to write the complete query, have it
 executed verbatim by the remote engine, collect the result and process it through a schemaless
-`Botany.Repo.insert_all` or `update_all` as seen before.  Anyhow, always try to rework your
-queries into their equivalent Ecto code, as to guarantee the highest portability for your code.
+`Botany.Repo.insert_all` or `update_all` as seen before.  Anyhow, we better try to rework our
+queries into their equivalent Ecto code, as to guarantee the highest portability for our code.
 
 When working at a software with strict performance requirements, you would definitely evaluate
 and refine your queries, at least the ones which your software would execute most frequently.
@@ -1018,8 +1025,8 @@ script in Elixir that makes no use of our Elixir schemas.  So what's the point?
 Portability.  The whole point is portability, and integration with `mix`.
 
 Obviously, if we exceed in the use of non-portable `fragment` SQL strings, we only keep the
-integration with `mix`.  After all, a script that alters a database schema, in which we write
-large chunks of non-portable SQL, you can just as well write in plain SQL.
+integration with `mix`.  After all, scripts that alter a database schema, in which we write
+large chunks of non-portable SQL, we can just as well write them in plain SQL.
 
 ### The down migration
 
@@ -1060,10 +1067,10 @@ flow out of the fingers.
 
 ### Multi-tables search and association
 
-As mentioned above, before this migration our `Plant` also has a `species` field, no more than
-a `:string`.  This is a very rude way to link a plant to its taxon.  With the above migration
-we moved the `species` field to the new `Accession` module, but did not translate it into a
-proper link to the `Taxon`.  Let's do it now.
+Our initial `Plant` schema had a `species` field, no more than a `:string`, and with the above
+migration we moved the plant's `species` field to the new `Accession` module.  This is a very
+rude way to link a plant to its taxon.  Since we already have a taxonomy structure, let's
+translate this text field into a proper link to the `Taxon`.
 
 This migration amounts to replacing the `Accession.species` string field with an association to
 the `taxon` table.  As in the previous migration, we add one column and drop an other.  Since
@@ -1100,10 +1107,12 @@ automatically reversible, and we need to define both the `up` and the `down` fun
   end
 ```
 
-The "do something" part, we could split in two, for this particular case at least.  We have
-some `species` ending with `sp.`, and these are relative to accessions identified at rank
-genus.  Then we have the others.  The ones to be matched to taxon at rank genus, would go
-through the query:
+The "do something" part, we could split in two, for this particular case at least.  Some of our
+`species` values end with a `sp.` substring.  These are relative to accessions identified at
+rank genus.  The others `species` values hold proper binomial names, identifying a species,
+that is a taxon at rank species.
+
+The ones to be matched to taxon at rank genus, would go through the query:
 
 ```
 from(t in "accession",
@@ -1111,25 +1120,28 @@ from(t in "accession",
   select: %{id: t.id, genus: fragment("substring(? from '^\\w+')", t.species)})
 ```
 
-So if we again misuse the fragment concept, we could extract the `taxon_id` in one shot:
+So let's not misuse the fragment concept, and extract the `taxon_id` this way:
 
 ```
 q = from(a in "accession",
   where: fragment(~S"substring(? from '\w+\.$') = 'sp.'", a.species),
-  update: [set: [taxon_id:
-    fragment(~S"(select id from taxon where epithet=substring(? from '^\w+'))", a.species)]])
+  join: t in "taxon",
+  on: t.epithet==fragment(~S"substring(? from '^\w+')", a.species),
+  update: [set: [taxon_id: t.id]])
 ```
 
-The ones to be associated to taxon at rank species will require us to do a search on two
-tables.  Here again we will be even more heavily misusing `fragment`, placing a nested query in
-it:
+The ones to be associated to taxon at rank species will require us to do a double search on the
+taxon table.  Here again the temptation to heavily misuse `fragment` is strong, we could write
+a double nested `SELECT` query in the `fragment`, but let's resist it!
 
 ```
 q = from(a in "accession",
-  where: fragment("substring(? from '\\w+\.$') != 'sp.'", a.species),
-  update: [set: [taxon_id:
-    fragment(~S"(select id from taxon where epithet=substring(? from '\w+$') and parent_id=(select id from taxon where epithet=substring(? from '^\w+')))",
-           a.species, a.species)]])
+  where: fragment(~S"substring(? from '\w+\.$') != 'sp.'", a.species),
+  join: g in "taxon",
+  on: g.epithet==fragment(~S"substring(? from '^\w+')", a.species),
+  join: s in "taxon",
+  on: s.epithet==fragment(~S"substring(? from '\w+$')", a.species) and s.parent_id==t.id,
+  update: [set: [taxon_id: s.id]])
 ```
 
 An update query has no result set, so all we need to do is to feed each of them to the
@@ -1138,6 +1150,9 @@ An update query has no result set, so all we need to do is to feed each of them 
 ```
 Botany.Repo.update_all(q, [])
 ```
+
+The `down` migration should reconstruct the name from the links, either the binomial, or the
+genus name with a trailing `sp.` substring.
 
 ### Verifications (many-to-many)
 
@@ -1237,7 +1252,7 @@ with a single query on the database.
             Map.put(:level, 0) |>
             Map.put(:timestamp, utc_now)))
     Botany.Repo.insert_all("verification", veris)
-    
+
     alter table(:accession) do
       remove :taxon_id
     end
@@ -1267,8 +1282,8 @@ whether life can be easier than this.
 ```
   def get_recursive_accessions(top) do
     top = top |> Botany.Repo.preload(:children) |> Botany.Repo.preload(:accessions)
-    Enum.reduce(Enum.map(top.children, &(Botany.get_recursive_accessions(&1))), 
-                top.accessions, 
+    Enum.reduce(Enum.map(top.children, &(Botany.get_recursive_accessions(&1))),
+                top.accessions,
                 fn x, acc -> x ++ acc end)
   end
 
@@ -1281,7 +1296,8 @@ whether life can be easier than this.
 ```
 
 If you did not alter the provided sample data, you can easily verify we have 8 *Zingiberales*,
-4 *Salvia* and 3 *Origanum* accessions.  What about the number of plants?
+4 *Salvia* and 3 *Origanum* accessions.  What about the number of plants?  Feel like writing a
+function calculating the sum of all `p.quantity` met following the associations?
 
 ## Contacts management (one-to-one)
 *day 4*
@@ -1292,14 +1308,13 @@ aspects of the various collections sharing the same base.
 
 Concretely, for example:
 
-People, with a name, and a way to contact them.  Then if it's a taxonomist, their specialty, or
-university affiliation.  If it's the contact person for a commercial enterprise, the name and
-the description of the enterprise, if it's an employee, their role and maybe even database
-access rights.
+People, with a name, and a way to contact them.  Then if it's a taxonomist, you want fields to
+hold their specialty, or university affiliation.  If it's the contact person for a commercial
+enterprise, the name and the description of the enterprise, if it's an employee, their role and
+maybe even database access rights.
 
-We would have that single central shared table, and several satellits with a foreign key to it,
+We would have that single central shared table, and several satellites with a foreign key to it,
 but respecting the constraint that only one element from each table ever uses any one element
 in the central shared table.
 
 Back to our example, we would use contact people to plant sources, and taxonomists.
-
