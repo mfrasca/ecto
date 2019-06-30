@@ -64,7 +64,9 @@ defmodule Botany.Repo.Migrations.PlantNameToAccessionCode do
       join: a in "accession",
       on: a.id == p.accession_id,
       update: [set: [name: fragment(~S"concat(?, '.', ?)", a.code, p.code),
-                     species: a.species]])
+                     species: a.species,
+                     bought_on: a.bought_on,
+                     bought_from: a.bought_from]])
     Botany.Repo.update_all(q, [])
 
     alter table(:plant) do

@@ -1,30 +1,43 @@
-# Navigating Relations
+# Ecto botanical tutorial
 
-In this guide we will learn how to work with relations between tables.  We will proceed by
-building a small real-life database structure with several related tables, modelling taxonomic
-information, and a plant collection.
+## Introduction
+
+### Goals and requisites
+
+In this tutorial we will learn how to work with relations between tables, how to write
+migrations, how to migrate data along with structure.  We will proceed by building a small
+real-life database structure for a botanical database, with several related tables, modelling
+taxonomic information, and a plant collection.
+
+If you take the time to follow this tutorial, try to dedicate between 2 and 4 hours for each
+section, and take some time between them.  The tutorial contains 4 sections, each has a
+subtitle "*day i*", as if you were working 3 hours a day.  Ancient Romans conquered the world
+at this pace.
+
+You can also skim through it and use as a repository of ideas and techniques.
+
+Please provide feedback in whatever form that fits you.  Pull requests will be very welcome.
+Also please help with any missing links to reference material.
+
+### Associations
 
 Speaking in SQL terms, we have a relation wherever a field in a table is marked as a `Foreign
 Key`, so that it `References` a `Primary Key` in an other table.  SQL can prescribe actions,
 associated to a `on delete` event on one side of the relation, and Ecto gives us tools to
-define this action.  We will also explore self-relations, where the target table coincides with
-the origin table, and multiple cases of self-relations.  When more objects in one table may be
-linked with more objects in the target table, we speak of a many-to-many relation, and we need
-an intermediate table, we will learn this too.  Such an intermediate table may contain
-information by its own right, and this too we're going to explore, stepwise.
+define this action **TODO: how?**.  We will also explore self-relations, where the target table
+coincides with the origin table, and multiple cases of self-relations.  When more objects in
+one table may be linked with more objects in the target table, we speak of a many-to-many
+relation, and we need an intermediate table, we will learn this too.  Such an intermediate
+table may contain information by its own right, and this too we're going to explore, stepwise.
 
 Ecto has several macros letting us define SQL relations, and navigate them, mostly allowing us
 to focus on meaning rather than the technical details.  We will introduce them as we go, here
 we merely mention them, so you know what to expect from reading this page: `belongs_to`,
 `has_many`, `has_one`, `many_to_many`.
 
-The *stepwise* approach will require us that we write migrations.  While we assume you know all
-about them, we are anyway going to be quite specific about that part too, for we are going to
-migrate relational links.
-
-If you opt to use this text as a tutorial, try to dedicate between 2 and 4 hours for each
-section, and take some time between them.  Each has a subtitle "*day i*", as if you were
-working 3 hours a day.  Ancient Romans conquered the world at this pace.
+The *stepwise* approach will require us that we write migrations.  While we assume you have
+read and studied about them from other sources, we are going to be quite specific about that
+part too, for we are going to migrate data along with structure.
 
 ## Modelling a garden
 *day 1*
@@ -34,8 +47,7 @@ Let's start from describing the data we want to represent.
 Say we have a rather large garden, that we keep plants in it, and we want software that helps us
 to find them back.  So we do some paperwork, draw a map of the garden, and we define beds, or
 locations, in the garden.  These have a name (humans need names) and a code (for in the map).
-Let's also add a description, for more verbose needs.  **TODO: we will add length limit to
-`name` and a much larger to `description`**
+Let's also add a description, for more verbose needs.
 
 ```iex
 defmodule Botany.Location do
@@ -90,10 +102,10 @@ The database for Botany.Repo has been created
 If so, fine, and continue, otherwise please go back to more basic documentation, and come back
 with your homework done.
 
-Oh, and if you wonder why on earth not give manual instructions? This way you can any time
-safely drop your database, remove the whole project directory structure, and restart this
-tutorial page, by simply copy-pasting the above lines into your bash prompt.  Works equally
-well on OSX and GNU/Linux.  If you're on Windows, what a pity.
+Oh, and if you wonder why on earth not give GUI and mouse-based instructions?  This way you can
+any time safely drop your database, remove the whole project directory structure, and restart
+this tutorial page, by simply copy-pasting the above lines into your bash prompt.  Works
+equally well on OSX and GNU/Linux.  If you're on Windows, what a pity.
 
 ### The first two schemas
 
@@ -142,22 +154,22 @@ what all migrations have in common, and what makes one migration easier to write
 > when it comes to writing the migration corresponding to what we change in the schemas.
 > Different views have been discussion in the Ecto project about this, and the bottom line is
 > that programmers need to know what they mean, and it's programmers who should tell Ecto, not
-> the opposite way: we need to maintain both the schemas, and the migration files, and make
+> the opposite way: we need to maintain both: the schemas, and the migration files, and make
 > sure they are consistent with each other.
 
 As of now what we have written is instructions how to connect to a database, a schema referring
 to a database table, and no database table implementing what the schema requires.  What we need
-is steps to create that database table, and this is what we call a migration.
+is steps to create that database table, and this is what we call the initial migration.
 
-So let's get to work and write our first migration, relative to moving from an empty database to
-one with the above schema definitions.  We use the `ecto.gen.migration` rule to create a
-boilerplate named migration, we call it `initial_migration`,
+So let's get to work and write our first migration, relative to moving from an empty database
+to one with the above schema definitions.  We use the `ecto.gen.migration` rule to create a
+boilerplate migration, and let's call it `initial_migration`,
 
 ```
 mix ecto.gen.migration initial_migration
 ```
 
-and we fill in the blanks in the newly created file:
+We fill in the blanks in the newly created file:
 
 ```iex
 defmodule Botany.Repo.Migrations.InitialMigration do
@@ -183,10 +195,11 @@ end
 
 For every `field`, we just copied the definition, and replaced the word `field` with `add`.
 
-For the `belongs_to` line from the plants schema, we've written a `location_id` line in the
-`plants` create table, referring to the `locations` table.  This implies we use its default
-primary key, `id`.  Obviously, for the migration to work, the `create table(:locations)` must
-precede the creation of the `plants` table, since we're referring the first from the second.
+For the `belongs_to` line from the plants schema, we've written a `add location_id` line in the
+`plants` create table block, specifying that the field refers to the `locations` table.  This
+implies we use its default primary key, `id`.  Obviously, for the migration to work, the
+`create table(:locations)` must precede the creation of the `plants` table, since we're
+referring the first from the second.
 
 Compare this to the schema definition, and you should be perplex about how we approached the
 `belongs_to` line.  Keep that for a couple of paragraphs, we will come to it.
@@ -210,9 +223,6 @@ tables.
 
 ### Looking at it from SQL
 
-Fine, it took time, but we now have our updated schema, where we can check the meaning of
-`belongs_to`.  We connect directly to the database, not through Elixir.
-
 Let's use the `psql` prompt (if you commonly use something else, you should know the commands
 corresponding to what we show here).  Our database is called `botany_repo` and you know your user
 and password.  From inside the `psql` prompt, give:
@@ -227,12 +237,12 @@ and password.  From inside the `psql` prompt, give:
 
 What is relevant to us here is the `CONSTRAINT` block at the end of each table.  Ecto not only
 created the columns, it also made our database aware of the meaning of the `location_id` in
-`plants`, and that it impacts the `locations` table as well.
+`plants`, and how it impacts the `locations` table as well.
 
 ### Migrate/rollback
 
 On second thought, this is not precisely what we needed.  I want to have a short `code`, a
-somewhat longer `name` -255 characters is definitely far too long-, and let's say that the
+somewhat longer `name` -255 characters is definitely much too long-, and let's say that the
 lenght of the description is fine.
 
 Let's undo the migration, correct it, redo, and review what we just did:
@@ -260,15 +270,14 @@ The initial migration is a very simple one, creating two new tables.  A table cr
 particularly easy to undo: simply drop the table.  Redoing the migration again created the
 table, adding the slightly altered columns.
 
-It is possibly interesting to keep a connection to the database, undo and redo our migration,
-checking how this is reflected in that `schema_migrations` table, which Ecto uses to keep track
-of the alignment between the migration files, and the database definition.
+It is possibly interesting to keep a connection to the database throughout the tutorial.  It's
+also advisable to undo and redo each migration, and to check how this is reflected in the
+`schema_migrations` table, on the tables we define and alter, and on their contents.
 
 Since we're here in the database, let's create a few database records, so we save time in the
-`iex` session, and can focus on navigation rather than data insertion.  More than a few in
-reality, because we're out to navigating information with real data.  (If there's botanists among
-you, please be assured we are on our way to do some proper work, I know this is *not* how to
-model botanic data.)
+`iex` session, and can focus on navigation rather than data insertion.  (If there's botanists
+among you, or database professionals, please be assured we are on our way to do some proper
+work, I know this is *not* how to model botanic data.)
 
 ```sql
 insert into location (id, code, name) values (1, 'GH1', 'tropical greenhouse'),
@@ -298,7 +307,7 @@ insert into plant (id, location_id, name, species) values
 
 ### Navigating, forward
 
-This is nice, now we can switch to iex, which we start as `iex -S mix`, and have a look.
+Fine, now let's switch to iex, which we start as `iex -S mix`, and have a look.
 
 ```iex
 iex> Botany.Plant
@@ -349,7 +358,8 @@ In our case, `name` is `:location`, and `queryable` is `Botany.Location`.  **TOD
 
 ### Preloading associations
 
-Let's `preload` the relation! (and by the way let's type a few aliases for our tables.)
+Our relations was marked as `NotLoaded`, so let's load it, won't we?  (and by the way let's
+type a few aliases for our tables.)
 
 ```iex
 iex> alias Botany.Plant
@@ -697,8 +707,8 @@ And as before, there's no impact on the database, just `recompile`, execute the 
 taking care to `preload(:children)`.
 
 Time for a bit of taxonomic navigation?  Experiment on your own, moving up the tree (match the
-`.parent`) and then down (match the `.children` and choose one).  For example from Calathea to
-Musa:
+`.parent`) and then down (match the `.children` and choose one).  For example from *Calathea*
+to *Musa*:
 
 ```iex
 import Ecto.Query
@@ -768,7 +778,9 @@ migrations.
 ## A more proper way to organize a botanical collection
 *day 3*
 
-### The garden as a library: the Accession (data migration - question)
+This is going to be a long day, be ready.
+
+### The garden as a library: the Accession
 
 When a gardener acquires a plant, they seldom acquire just one for each species, it is often in
 batches, where a batch contains several groups of plants from the same source, of the same
@@ -907,14 +919,15 @@ history, as we do in migrations.
 
 ### Handling SQL from Elixir
 
-The readers concerned with efficiency will complain about the loop which we have hidden in
-`Enum.each`, which became very visible in the form of a cascade of `[debug]` logging records on
-our `iex` shell.  Could we achieve the same result with a couple of queries?  That is, at a
-constant cost, instead of linear?
+The readers concerned with efficiency will complain about the loop which we have hidden in the
+`Enum.each` evaluation, loop that became very visible in the form of a cascade of `[debug]`
+logging records on our `iex` shell.  Could we achieve the same result with a couple of queries?
+That is, at a constant cost, instead of linear?
 
 Indeed, the proposed migration is not the most efficient: it uses Elixir to iterate over the
 plants collection, sending as many queries to the SQL engine as we have plants.  And as an
-extra minus point, it messes up the `accession.id` field, leaving holes in the sequence.
+extra minus point, it messes up the `accession.id` field, leaving holes in the sequence,
+handling the value directly.
 
 To do better, we need to get a tighter grip on the SQL produced by Ecto.  In practice, we might
 want to first write the SQL that we want Ecto to produce, then work back to Elixir code, until
@@ -933,14 +946,16 @@ Repo.insert_all("accession", q)
 
 The evaluation of the above lines splits the `plant.code` field in SQL, not any more in Elixir
 as we were doing.  The `fragment` clause lets us write SQL, and pass it to Ecto.  Notice how we
-are using the `~S` sigil, to avoid escaping of `\` which we need in our SQL fragment.  Also
-notice how we are now assuming that our SQL engine provides that `substring` function, which is
-most likely the case but who knows maybe also not.
+are using the `~S` sigil, to prevent Elixir from interpreting the `\` escape character: we need
+them verbatim in our SQL fragment.  Also notice how we are now assuming that our SQL engine
+provides that `substring` function, which is most likely the case but who knows maybe also not.
 
-A consequence of letting the engine decide the `id`, is that we now need to join the two
-tables to retrieve the `accession.id` value corresponding to an `accession.code`.  With our
-naïve approach, we found this information from the `"plant"` table.  This is again a task we
-can accomplish by `fragment`:
+A consequence of letting the engine decide the `id`, is that we now need to join the two tables
+to retrieve the `accession.id` value corresponding to an `accession.code`.  With our naïve
+approach, this information was implicitly available from the `"plant"` table.
+
+We have learned how to use `fragment`, let's now learn when not to use it.  Consider the
+following code:
 
 ```
 q = from(p in "plant",
@@ -951,8 +966,9 @@ Botany.Repo.update_all(q, [])
 ```
 
 This approach contains a complete select fragment, and this is very questionable for at least
-two reasons.  For one, being a complete fragment, it means more assumptions on the SQL back
-end.  Next, it executes that select statement for each plant, the loop being hidden in SQL.
+two reasons.  For one, if we write a complete SQL statement in a fragment, we are hard-coding
+our assumptions on the syntax of the SQL back end.  Next, our fragment executes that select
+statement for each plant, the loop being hidden in SQL.
 
 The `Ecto.Query.from/2` function offers a `subquery` option, which could help us addressing the
 above first point of criticism, but in fact a far better approach, addressing both points,
@@ -967,8 +983,11 @@ q = from(p in "plant",
 Botany.Repo.update_all(q, [])
 ```
 
-After establishing the link p.accession_id->a.id, we can use it to migrate the remaining fields
-of the previous plant table:
+It is worthwhile to have a look at the SQL statement produced by Ecto.
+
+Now that we have established the link plant.accession_id->accession.id (and copied the trailing
+plant name to the new plant.code field), we can migrate the remaining fields of the old plant
+table to the new accession table:
 
 ```
     q = from(a in "accession",
@@ -981,7 +1000,7 @@ of the previous plant table:
     Botany.Repo.update_all(q, [])
 ```
 
-We haven't written the code for rolling back the transaction, so if you want to see this
+We haven't written the code for rolling back the transaction (yet), so if you want to see this
 migration in action, you would need to drop all tables, including `schema_migrations`, and
 repeat all steps up to here.  Please do this, it's good to rehearse steps.
 
@@ -1044,18 +1063,23 @@ the fingers.
     alter table(:plant) do
       add :name, :string
       add :species, :string
+      add :bought_on, :utc_datetime
+      add :bought_from, :string
     end
 
     flush()
 
     # we want to execute this one:
     # UPDATE plant p SET name=CONCAT((SELECT code FROM accession a WHERE a.id=p.accession_id),'.',p.code);
+    # we should also copy all other fields, really.
 
     q = from(p in "plant",
       join: a in "accession",
       on: a.id == p.accession_id,
       update: [set: [name: fragment(~S"concat(?, '.', ?)", a.code, p.code),
-                     species: a.species]])
+                     species: a.species,
+                     bought_on: a.bought_on,
+                     bought_from: a.bought_from]])
     Botany.Repo.update_all(q, [])
 
     alter table(:plant) do
@@ -1067,12 +1091,19 @@ the fingers.
   end
 ```
 
+Again, experiment with migrating and rolling back, and checking the impact on the database.
+
+```
+mix ecto.migrate --step 1
+mix ecto.rollback
+```
+
 ### Multi-tables search and association
 
 Our initial `Plant` schema had a `species` field, no more than a `:string`, and with the above
 migration we moved the plant's `species` field to the new `Accession` module.  This is a very
 rude way to link a plant to its taxon.  Since we already have a taxonomy structure, let's
-translate this text field into a proper link to the `Taxon`.
+translate this text field into a proper link to the correct `Taxon` record.
 
 This migration amounts to replacing the `Accession.species` string field with an association to
 the `taxon` table.  As in the previous migration, we add one column and drop an other.  Since
@@ -1112,7 +1143,9 @@ automatically reversible, and we need to define both the `up` and the `down` fun
 In this particular case we must split the "do something" part in two actions.  Some of our
 `species` values end with a `sp.` substring.  These are relative to accessions identified at
 rank genus.  The others `species` values hold proper binomial names, identifying a species,
-that is a taxon at rank species.
+that is a taxon at rank species.  Notice how a binomial name is composed of two epithets, the
+first identifies the genus, the second is relative to one taxon at rank species belonging to
+the genus.
 
 The ones to be matched to taxon at rank genus, would go through the query:
 
@@ -1138,7 +1171,7 @@ write a double nested `SELECT` query in the `fragment`, but let's resist it!
 
 ```
 q = from(a in "accession",
-  where: fragment(~S"substring(? from '\w+\.$') != 'sp.'", a.species),
+  where: fragment(~S"substring(? from '[\w\.]+$') != 'sp.'", a.species),
   join: g in "taxon",
   on: g.epithet==fragment(~S"substring(? from '^\w+')", a.species),
   join: s in "taxon",
@@ -1178,8 +1211,6 @@ The structure is always the same, the only part that differs is the data migrati
       update: [set: [species: fragment(~S"concat(?, ' ', ?)", g.epithet, s.epithet)]])
     Botany.Repo.update_all(q, [])
 ```
-
-
 
 ### Verifications (many-to-many)
 
@@ -1249,7 +1280,8 @@ And let's write the new migration, by now you know what's the structure: use
 `ecto.gen.migration` to create an empty migration, replace the emtpy `change` function with
 `up` and `down`, write the code for both functions, and the structure is in both cases: add
 tables and/or columns to the database, flush the changes, migrate the data, remove the obsolete
-structure if need be.  And, you most likely want to `import Ecto.Query`.
+structure if need be.  And, you most likely want to `import Ecto.Query`, in both `up` and
+`down`.
 
 You also by now know: the data model (the above target structure) is what we use in the
 application, but in the migrations we work schema-less and we have complete control and
