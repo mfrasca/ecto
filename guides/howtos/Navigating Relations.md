@@ -905,22 +905,21 @@ different definition.  It might even have been dropped altogether.
 Since modules reflect the latest situation, they cannot be relied upon while reconstructing
 history, as we do in migrations.
 
-### Things that would not work, or other approaches
+### Handling SQL from Elixir
 
 The readers concerned with efficiency will complain about the loop which we have hidden in
 `Enum.each`, which became very visible in the form of a cascade of `[debug]` logging records on
 our `iex` shell.  Could we achieve the same result with a couple of queries?  That is, at a
 constant cost, instead of linear?
 
-Indeed, the proposed migration is not the most efficient: it iterates over the plants
-collection from Elixir, then issues one query at a time to the SQL engine.  And as an extra
-minus point, it messes up the `accession.id` field, leaving holes in the sequence.
+Indeed, the proposed migration is not the most efficient: it uses Elixir to iterate over the
+plants collection, sending as many queries to the SQL engine as we have plants.  And as an
+extra minus point, it messes up the `accession.id` field, leaving holes in the sequence.
 
-To do better with such issues, we need to get a tighter grip on the SQL produced by Ecto, in
-practice, we might want to first write the SQL that we want Ecto to produce, then work back to
-Elixir code, until Ecto produces a query similar to what we started from.  If this goes beyond
-the scope of a tutorial on Ecto, is up to you to decide.  In case, just skip to the following
-paragraph.
+To do better, we need to get a tighter grip on the SQL produced by Ecto.  In practice, we might
+want to first write the SQL that we want Ecto to produce, then work back to Elixir code, until
+Ecto produces a query similar to what we started from.  If this goes beyond the scope of a
+tutorial on Ecto, is up to you to decide.  In case, just skip to the following paragraph.
 
 Nice to see you here.  Let's start by addressing that second minus point first!  All we need is
 to insert accessions without specifying the `id` field.
@@ -934,9 +933,9 @@ Repo.insert_all("accession", q)
 
 The evaluation of the above lines splits the `plant.code` field in SQL, not any more in Elixir
 as we were doing.  The `fragment` clause lets us write SQL, and pass it to Ecto.  Notice how we
-are prepending our string fragment with `~S`, to avoid interpretation of `\` which we need in
-our SQL query.  Also notice how we are now assuming that our SQL engine provides that
-`substring` function, which is most likely the case but who knows maybe also not.
+are using the `~S` sigil, to avoid escaping of `\` which we need in our SQL fragment.  Also
+notice how we are now assuming that our SQL engine provides that `substring` function, which is
+most likely the case but who knows maybe also not.
 
 A consequence of letting the engine decide the `id`, is that we now need to join the two
 tables to retrieve the `accession.id` value corresponding to an `accession.code`.  With our
@@ -956,8 +955,8 @@ two reasons.  For one, being a complete fragment, it means more assumptions on t
 end.  Next, it executes that select statement for each plant, the loop being hidden in SQL.
 
 The `Ecto.Query.from/2` function offers a `subquery` option, which could help us addressing the
-criticism regarding the complete query written in the fragment, but in fact a far better
-approach, addressing both points, would be to use a combination of the `join`/`on` options:
+above first point of criticism, but in fact a far better approach, addressing both points,
+would be to use a combination of the `join`/`on` options:
 
 ```
 q = from(p in "plant",
@@ -984,8 +983,10 @@ of the previous plant table:
 
 We haven't written the code for rolling back the transaction, so if you want to see this
 migration in action, you would need to drop all tables, including `schema_migrations`, and
-repeat all steps up to here.  You would see precisely four queries being executed **TODO
-review**:
+repeat all steps up to here.  Please do this, it's good to rehearse steps.
+
+With this new migration we have precisely four queries, a much better result than the cascade
+we had before:
 
 ```SQL
 SELECT DISTINCT ON (substring(p0."name" from '^\d+\.\d+')) substring(p0."name" from '^\d+\.\d+') FROM "plant" AS p0
@@ -1004,20 +1005,20 @@ UPDATE "accession" AS a0 SET "species" = p1."species",
   []
 ```
 
-There will surely be also cases where it is easier to write the complete query, have it
-executed verbatim by the remote engine, collect the result and process it through a schemaless
+There will surely be cases where it is easier to write the complete query, have it executed
+verbatim by the remote engine, collect the result and process it through a schemaless
 `Botany.Repo.insert_all` or `update_all` as seen before.  Anyhow, we better try to rework our
 queries into their equivalent Ecto code, as to guarantee the highest portability for our code.
 
-When working at a software with strict performance requirements, you would definitely evaluate
+When working at a software with strict performance requirements, you would definitely review
 and refine your queries, at least the ones which your software would execute most frequently.
 Here, after all, we're just doing a migration, so paying so much care to efficiency is possibly
 not such a crucial issue.
 
 ### Out-of-the-box thoughts
 
-As said, we work all migrations schemaless.  And what we wrote, this *migration file*, it's a
-`exs` script.
+As said, we work all migrations schemaless.  Also notice: this *migration file* is a `exs`
+script.
 
 Said in the opposite order, it might sound funny: to alter our database schema, we wrote a
 script in Elixir that makes no use of our Elixir schemas.  So what's the point?
@@ -1032,9 +1033,9 @@ large chunks of non-portable SQL, we can just as well write them in plain SQL.
 
 We just showed the `up` migration, and we also need its `down` equivalent.  The structure is
 similar to the `up` migration, adding columns, flushing, migrating data, removing columns and
-table in the right order.  In the below solution, we first mention our target SQL query, have a
-look at it, rethink all what we've said above, then I bet that the Ecto equivalent will just
-flow out of the fingers.
+tables.  In the below solution, we first mention our target SQL query, have a look at it,
+rethink all what we've said above, then I bet that the Ecto equivalent will just flow out of
+the fingers.
 
 ```
   def down do
@@ -1053,7 +1054,8 @@ flow out of the fingers.
     q = from(p in "plant",
       join: a in "accession",
       on: a.id == p.accession_id,
-      update: [set: [name: fragment(~S"concat(?, '.', ?)", a.code, p.code)]])
+      update: [set: [name: fragment(~S"concat(?, '.', ?)", a.code, p.code),
+                     species: a.species]])
     Botany.Repo.update_all(q, [])
 
     alter table(:plant) do
@@ -1107,7 +1109,7 @@ automatically reversible, and we need to define both the `up` and the `down` fun
   end
 ```
 
-The "do something" part, we could split in two, for this particular case at least.  Some of our
+In this particular case we must split the "do something" part in two actions.  Some of our
 `species` values end with a `sp.` substring.  These are relative to accessions identified at
 rank genus.  The others `species` values hold proper binomial names, identifying a species,
 that is a taxon at rank species.
@@ -1120,7 +1122,7 @@ from(t in "accession",
   select: %{id: t.id, genus: fragment("substring(? from '^\\w+')", t.species)})
 ```
 
-So let's not misuse the fragment concept, and extract the `taxon_id` this way:
+So let's not misuse the fragment concept, and let's update the `taxon_id` this way:
 
 ```
 q = from(a in "accession",
@@ -1130,9 +1132,9 @@ q = from(a in "accession",
   update: [set: [taxon_id: t.id]])
 ```
 
-The ones to be associated to taxon at rank species will require us to do a double search on the
-taxon table.  Here again the temptation to heavily misuse `fragment` is strong, we could write
-a double nested `SELECT` query in the `fragment`, but let's resist it!
+The ones to be associated to taxon at rank species will require us to do two chained joins with
+the taxon table.  Here again the temptation to heavily misuse `fragment` is strong, we could
+write a double nested `SELECT` query in the `fragment`, but let's resist it!
 
 ```
 q = from(a in "accession",
@@ -1152,7 +1154,32 @@ Botany.Repo.update_all(q, [])
 ```
 
 The `down` migration should reconstruct the name from the links, either the binomial, or the
-genus name with a trailing `sp.` substring.
+genus name with a trailing `sp.` substring.  Give it a try, before reading further.
+
+The structure is always the same, the only part that differs is the data migrating section:
+
+```
+    %{id: id_genus} = Botany.Repo.one(from(r in "rank", select: [:id], where: r.name=="genus"))
+    %{id: id_species} = Botany.Repo.one(from(r in "rank", select: [:id], where: r.name=="species"))
+    # rank genus
+    q = from(a in "accession",
+      join: g in "taxon",
+      on: a.taxon_id==g.id,
+      where: g.rank_id == ^id_genus,
+      update: [set: [species: fragment(~S"concat(?, ' sp.')", g.epithet)]])
+    Botany.Repo.update_all(q, [])
+    # rank species
+    q = from(a in "accession",
+      join: s in "taxon",
+      on: a.taxon_id==s.id,
+      join: g in "taxon",
+      on: s.parent_id==g.id,
+      where: s.rank_id == ^id_species,
+      update: [set: [species: fragment(~S"concat(?, ' ', ?)", g.epithet, s.epithet)]])
+    Botany.Repo.update_all(q, [])
+```
+
+
 
 ### Verifications (many-to-many)
 
@@ -1259,7 +1286,7 @@ with a single query on the database.
   end
 ```
 
-The `down` migration, let's leave it for an other time.
+The `down` migration, let's leave it for an other time.  **TODO**.
 
 After successfully migrated the data, you should be able to grab any of our taxa, and request
 the associated accessions.  For example as this:
@@ -1297,7 +1324,7 @@ whether life can be easier than this.
 
 If you did not alter the provided sample data, you can easily verify we have 8 *Zingiberales*,
 4 *Salvia* and 3 *Origanum* accessions.  What about the number of plants?  Feel like writing a
-function calculating the sum of all `p.quantity` met following the associations?
+function calculating the sum of all `p.quantity` we meet as we follow the associations?
 
 ## Contacts management (one-to-one)
 *day 4*
