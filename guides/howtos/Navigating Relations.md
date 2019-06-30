@@ -908,20 +908,22 @@ history, as we do in migrations.
 ### Things that would not work, or other approaches
 
 The readers concerned with efficiency will complain about the loop which we have hidden in
-`Enum.each`.  Could we do that with a couple of queries?  That is, at a constant cost, instead
-of linear?
+`Enum.each`, which became very visible in the form of a cascade of `[debug]` logging records on
+our `iex` shell.  Could we achieve the same result with a couple of queries?  That is, at a
+constant cost, instead of linear?
 
 Indeed, the proposed migration is not the most efficient: it iterates over the plants
 collection from Elixir, then issues one query at a time to the SQL engine.  And as an extra
 minus point, it messes up the `accession.id` field, leaving holes in the sequence.
 
 To do better with such issues, we need to get a tighter grip on the SQL produced by Ecto, in
-practice, we might want to first write the SQL we need Ecto to produce, then work back to
-Elixir code.  This goes beyond the scope of this text, so decide for yourself if you skip to
-the following paragraph, or continue reading.
+practice, we might want to first write the SQL that we want Ecto to produce, then work back to
+Elixir code, until Ecto produces a query similar to what we started from.  If this goes beyond
+the scope of a tutorial on Ecto, is up to you to decide.  In case, just skip to the following
+paragraph.
 
-Let's start by addressing that second minus point first!  All we need is to insert accessions
-without specifying the id field.
+Nice to see you here.  Let's start by addressing that second minus point first!  All we need is
+to insert accessions without specifying the `id` field.
 
 ```
 q = from(t in "plant",
@@ -936,9 +938,10 @@ are prepending our string fragment with `~S`, to avoid interpretation of `\` whi
 our SQL query.  Also notice how we are now assuming that our SQL engine provides that
 `substring` function, which is most likely the case but who knows maybe also not.
 
-An other consecuence is that we now need to join the two tables to retrieve the `accession_id`
-value corresponding to an `accession.code`.  With our naïve approach, we found this information
-from the `"plant"` table.  This is again a task we can accomplish by `fragment`:
+A consequence of letting the engine decide the `id`, is that we now need to join the two
+tables to retrieve the `accession.id` value corresponding to an `accession.code`.  With our
+naïve approach, we found this information from the `"plant"` table.  This is again a task we
+can accomplish by `fragment`:
 
 ```
 q = from(p in "plant",
@@ -952,23 +955,52 @@ This approach contains a complete select fragment, and this is very questionable
 two reasons.  For one, being a complete fragment, it means more assumptions on the SQL back
 end.  Next, it executes that select statement for each plant, the loop being hidden in SQL.
 
-The `Ecto.Query.from/2` function offers a `subquery` option, which might help us with the first
-criticism point for the above approach, but in fact a better approach, addressing both points,
-would using the `join`/`on` options:  **TODO (check that it does work)**
+The `Ecto.Query.from/2` function offers a `subquery` option, which could help us addressing the
+criticism regarding the complete query written in the fragment, but in fact a far better
+approach, addressing both points, would be to use a combination of the `join`/`on` options:
 
 ```
 q = from(p in "plant",
   join: a in "accession",
   on: a.code == fragment(~S"substring(? from '^\d+\.\d+')", p.name),
-  update: [set: [accession_id: a.id]])
+  update: [set: [accession_id: a.id,
+                 code: fragment(~S"substring(? from '\d+$')", p.name)]])
 Botany.Repo.update_all(q, [])
 ```
 
-As always: check the documentation, ask on a forum, and experiment.
+After establishing the link p.accession_id->a.id, we can use it to migrate the remaining fields
+of the previous plant table:
 
-There will be cases where it will be easier to write the complete query, have it executed by
-the remote engine, collect the result and process it through a schemaless
-`Botany.Repo.insert_all` or `update_all` as seen before.
+```
+    q = from(a in "accession",
+      join: p in "plant",
+      on: p.accession_id == a.id
+      update: [set: [species: p.species,
+                     orig_quantity: p.orig_quantity,
+                     bought_on: p.bought_on,
+                     bought_from: p.bought_from]])
+    Botany.Repo.update_all(q, [])
+```
+
+We haven't written the code for rolling back the transaction, so if you want to see this
+migration in action, you would need to drop all tables, including `schema_migrations`, and
+repeat all steps up to here.  You would see precisely four queries being executed **TODO
+review**:
+
+```SQL
+SELECT DISTINCT ON (substring(p0."name" from '^\d+\.\d+')) substring(p0."name" from '^\d+\.\d+') FROM "plant" AS p0 
+  []
+INSERT INTO "accession" ("code") VALUES ($1),($2),($3),($4),($5),($6),($7),($8),($9),($10),($11),($12),($13),($14),($15) 
+  ["2018.0002", "2018.0019", "2018.0025", "2018.0026", "2018.0027", "2018.0029", "2018.0032", "2018.0044", "2018.0045", 
+   "2018.0047", "2018.0057", "2018.0058", "2018.0063", "2018.0067", "2018.0068"]
+UPDATE "plant" AS p0 SET "accession_id" = a1."id", "code" = substring(p0."name" from '\d+$') FROM "accession" AS a1 WHERE (a1."code" = substring(p0."name" from '^\d+\.\d+')) 
+  []
+```
+
+There will surely be also cases where it is easier to write the complete query, have it
+executed verbatim by the remote engine, collect the result and process it through a schemaless
+`Botany.Repo.insert_all` or `update_all` as seen before.  Anyhow, always try to rework your
+queries into their equivalent Ecto code, as to guarantee the highest portability for your code.
 
 When working at a software with strict performance requirements, you would definitely evaluate
 and refine your queries, at least the ones which your software would execute most frequently.
@@ -978,10 +1010,10 @@ not such a crucial issue.
 ### Out-of-the-box thoughts
 
 As said, we work all migrations schemaless.  And what we wrote, this *migration file*, it's a
-script.
+`exs` script.
 
 Said in the opposite order, it might sound funny: to alter our database schema, we wrote a
-script in Elixir which makes no use of our Elixir schemas.  So what's the point?
+script in Elixir that makes no use of our Elixir schemas.  So what's the point?
 
 Portability.  The whole point is portability, and integration with `mix`.
 
@@ -993,10 +1025,14 @@ large chunks of non-portable SQL, you can just as well write in plain SQL.
 
 We just showed the `up` migration, and we also need its `down` equivalent.  The structure is
 similar to the `up` migration, adding columns, flushing, migrating data, removing columns and
-table in the right order.  **any volunteer**?
+table in the right order.  In the below solution, we first mention our target SQL query, have a
+look at it, rethink all what we've said above, then I bet that the Ecto equivalent will just
+flow out of the fingers.
 
 ```
   def down do
+    import Ecto.Query
+
     alter table(:plant) do
       add :name, :string
       add :species, :string
@@ -1004,8 +1040,14 @@ table in the right order.  **any volunteer**?
 
     flush()
 
-    # we should execute this one:
+    # we want to execute this one:
     # UPDATE plant p SET name=CONCAT((SELECT code FROM accession a WHERE a.id=p.accession_id),'.',p.code);
+
+    q = from(p in "plant",
+      join: a in "accession",
+      on: a.id == p.accession_id,
+      update: [set: [name: fragment(~S"concat(?, '.', ?)", a.code, p.code)]])
+    Botany.Repo.update_all(q, [])
 
     alter table(:plant) do
       remove :code
