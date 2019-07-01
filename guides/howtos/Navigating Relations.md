@@ -438,7 +438,7 @@ the `Ecto.Query` module.)
 
 ```iex
 import Ecto.Query
-gh1 = Botany.Repo.one(from(l in Location, where: l.code=="GH1"))
+gh1 = Botany.Repo.get_by(Location, code: "GH1")
 ```
 
 How do we do that… I would like to just type `gh1.plants`, doesn't it make sense, and I don't
@@ -663,14 +663,15 @@ insert into taxon (id,rank_id,epithet,authorship,parent_id) values
 ```
 
 It's probably useful if we stop here again, and do some data navigation, like we write a query
-for the taxon named *Salvia*, match the query to a variable `q`, and then evaluate `q` and
-extract the information for the taxon rank, its epithet, and its parent taxon epithet.
+for a taxon where the name starts by *Origa*, match the query to a variable `q`, and then
+evaluate `q` and extract the information for the taxon rank, its epithet, and its parent taxon
+epithet.
 
 A piece of cake, or isn't it? (remember to `recompile` when necessary, and remember that values
 are immutable, and that reloading a module does not impact existing values.)
 
 ```
-q = from t in Taxon, where: t.epithet=="Salvia"
+q = from(t in Taxon, where: like(t.epithet, "Origa%")
 ```
 
 Next part is evaluation, and preloading fields:
@@ -688,6 +689,12 @@ or, if you only need one field, you can extract it from the other end:
 
 ```
 rank_name = matched_taxon.rank.name
+```
+
+Had we known the complete epithet, the code to match the taxon would be much shorter:
+
+```
+matched_taxon = Botany.Repo.get_by(Taxon, epithet: "Musa")
 ```
 
 ### Collecting taxon children
@@ -711,9 +718,7 @@ Time for a bit of taxonomic navigation?  Experiment on your own, moving up the t
 to *Musa*:
 
 ```iex
-import Ecto.Query
-q = from t in Botany.Taxon, where: t.epithet=="Calathea"
-origin = q |> Botany.Repo.one |> Botany.Repo.preload(:parent)
+origin = Botany.Repo.get_by(Botany.Taxon, epithet: "Calathea") |> Botany.Repo.preload(:parent)
 family1 = origin.parent |> Botany.Repo.preload(:parent)
 ordo = family1.parent |> Botany.Repo.preload(:children)
 family2 = Enum.find(ordo.children, fn x -> x.epithet=="Musaceae" end) |> Botany.Repo.preload(:children)
@@ -1192,8 +1197,9 @@ genus name with a trailing `sp.` substring.  Give it a try, before reading furth
 The structure is always the same, the only part that differs is the data migrating section:
 
 ```
-    %{id: id_genus} = Botany.Repo.one(from(r in "rank", select: [:id], where: r.name=="genus"))
-    %{id: id_species} = Botany.Repo.one(from(r in "rank", select: [:id], where: r.name=="species"))
+    %{id: id_genus} = Botany.Repo.get_by(Botany.Rank, name: "genus")
+    %{id: id_species} = Botany.Repo.get_by(Botany.Rank, name: "species")
+
     # rank genus
     q = from(a in "accession",
       join: g in "taxon",
@@ -1325,7 +1331,7 @@ the associated accessions.  For example as this:
 
 ```
 Botany.Taxon |> Ecto.Query.last |> Botany.Repo.one |> Botany.Repo.preload(:accessions)
-from(t in Botany.Taxon, where: t.epithet=="Musa")|> Botany.Repo.one |> Botany.Repo.preload(:accessions)
+Botany.Repo.get_by(Botany.Taxon, t.epithet: "Musa") |> Botany.Repo.preload(:accessions)
 ```
 
 ### Recursive associations
