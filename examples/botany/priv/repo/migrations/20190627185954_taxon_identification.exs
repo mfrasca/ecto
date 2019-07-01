@@ -4,7 +4,7 @@ defmodule Botany.Repo.Migrations.TaxonIdentification do
   def up do
     import Ecto.Query
     alter table(:accession) do
-      add :taxon_id, references(:taxon)
+      add :taxon_id, references(:taxon, on_delete: :restrict)
     end
 
     flush()

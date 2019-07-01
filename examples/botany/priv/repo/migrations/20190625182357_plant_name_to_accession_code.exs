@@ -14,7 +14,7 @@ defmodule Botany.Repo.Migrations.PlantNameToAccessionCode do
 
     alter table(:plant) do
       add :code, :string
-      add :accession_id, references(:accession)
+      add :accession_id, references(:accession, on_delete: :restrict)
     end
 
     flush()

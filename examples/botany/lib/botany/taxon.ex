@@ -2,7 +2,8 @@ defmodule Botany.Taxon do
   use Ecto.Schema
 
   schema "taxon" do
-    has_many :children, Botany.Taxon, foreign_key: :parent_id  # backward link
+    has_many :children, Botany.Taxon, foreign_key: :parent_id
+    has_many :verifications, Botany.Verification
     many_to_many :accessions, Botany.Accession, join_through: "verification"
     field :epithet, :string
     field :authorship, :string

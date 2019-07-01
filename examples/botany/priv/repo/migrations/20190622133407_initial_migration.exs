@@ -9,7 +9,7 @@ defmodule Botany.Repo.Migrations.InitialMigration do
     end
 
     create table(:plant) do
-      add :location_id, references(:location)
+      add :location_id, references(:location, on_delete: restrict)
       add :name, :string
       add :species, :string
       add :quantity, :integer

@@ -9,8 +9,8 @@ defmodule Botany.Repo.Migrations.CreateTaxonomy do
     create table(:taxon) do
       add :epithet, :string
       add :authorship, :string
-      add :rank_id, references(:rank)
-      add :parent_id, references(:taxon)
+      add :rank_id, references(:rank, on_delete: :restrict)
+      add :parent_id, references(:taxon, on_delete: :restrict)
     end
   end
 end

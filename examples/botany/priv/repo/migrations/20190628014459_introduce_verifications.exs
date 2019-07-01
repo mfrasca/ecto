@@ -4,8 +4,8 @@ defmodule Botany.Repo.Migrations.IntroduceVerifications do
   def up do
     import Ecto.Query
     create table(:verification) do
-      add :accession_id, references(:accession)
-      add :taxon_id, references(:taxon)
+      add :accession_id, references(:accession, on_delete: :restrict)
+      add :taxon_id, references(:taxon, on_delete: :restrict)
       add :verifier, :string
       add :level, :integer
       add :timestamp, :utc_datetime
@@ -29,7 +29,7 @@ defmodule Botany.Repo.Migrations.IntroduceVerifications do
 
   def down do
     alter table(:accession) do
-      add :taxon_id, references(:taxon)
+      add :taxon_id, references(:taxon, on_delete: :restrict)
     end
     flush()
     ## move one of the verification links to the accession table

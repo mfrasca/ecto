@@ -3,7 +3,7 @@ defmodule Botany.Repo.Migrations.AddingSynonymies do
 
   def change do
     alter table("taxon") do
-      add :accepted_id, references(:taxon)
+      add :accepted_id, references(:taxon, on_delete: :restrict)
     end
   end
 end
